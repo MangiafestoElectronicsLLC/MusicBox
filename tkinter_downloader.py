@@ -1,10 +1,10 @@
 import os
 import threading
+import subprocess
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
 import yt_dlp
-from pydub import AudioSegment, effects
 
 # Try to enable drag-and-drop via tkinterdnd2 (optional)
 try:
@@ -12,15 +12,32 @@ try:
     TK_DND_AVAILABLE = True
 except ImportError:
     TK_DND_AVAILABLE = False
-    TkinterDnD = tk.Tk  # fallback to normal Tk
+    from tkinter import Tk as TkinterDnD  # normal Tk fallback
 
 
-# ---------- CONFIG DEFAULTS ----------
-
-DEFAULT_TRIM_SECONDS = 35  # for Batocera intros
+DEFAULT_TRIM_SECONDS = 35  # Batocera-friendly intro length
 
 
-# ---------- CORE DOWNLOAD / PROCESSING LOGIC ----------
+# ---------- CORE DOWNLOAD / PROCESSING ----------
+
+def run_ffmpeg(input_path, output_path, trim_seconds=None, normalize=False):
+    """
+    Use ffmpeg CLI to trim and/or normalize audio.
+    Requires ffmpeg in PATH.
+    """
+    cmd = ["ffmpeg", "-y", "-i", input_path]
+
+    if trim_seconds is not None:
+        cmd += ["-t", str(trim_seconds)]
+
+    if normalize:
+        # EBU R128 loudness normalization (reasonable default)
+        cmd += ["-af", "loudnorm"]
+
+    cmd.append(output_path)
+
+    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
 
 def download_and_process_audio(
     url,
@@ -31,8 +48,6 @@ def download_and_process_audio(
 ):
     """
     Download a single YouTube URL as MP3, optionally trim and normalize.
-
-    progress_callback: function(message: str) called with status updates.
     """
     if progress_callback:
         progress_callback(f"Downloading: {url}")
@@ -62,21 +77,20 @@ def download_and_process_audio(
     if trim_seconds is not None or normalize:
         if progress_callback:
             progress_callback("Processing audio...")
-
-        audio = AudioSegment.from_file(mp3_path)
-
-        if trim_seconds is not None:
-            max_ms = int(trim_seconds * 1000)
-            if len(audio) > max_ms:
-                audio = audio[:max_ms]
-
-        if normalize:
-            audio = effects.normalize(audio)
-
-        audio.export(mp3_path, format="mp3")
+        processed_path = os.path.join(output_folder, f"{title}_processed.mp3")
+        run_ffmpeg(
+            input_path=mp3_path,
+            output_path=processed_path,
+            trim_seconds=trim_seconds,
+            normalize=normalize,
+        )
+        # Replace original with processed
+        os.replace(processed_path, mp3_path)
 
     if progress_callback:
         progress_callback("Done")
+
+    return mp3_path, title
 
 
 # ---------- TKINTER GUI APP ----------
@@ -84,11 +98,9 @@ def download_and_process_audio(
 class YoutubeMp3DownloaderApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("YouTube to MP3 Downloader")
-        self.root.geometry("650x480")
+        self.root.title("MusicBox - YouTube to MP3")
+        self.root.geometry("680x500")
         self.root.resizable(False, False)
-
-        self.apply_dark_mode()
 
         self.output_folder = tk.StringVar()
         self.batch_mode = tk.BooleanVar(value=False)
@@ -96,11 +108,12 @@ class YoutubeMp3DownloaderApp:
         self.normalize_enabled = tk.BooleanVar(value=True)
         self.trim_seconds = tk.IntVar(value=DEFAULT_TRIM_SECONDS)
 
+        self.apply_dark_mode()
         self.create_widgets()
 
     def apply_dark_mode(self):
-        bg = "#121212"
-        fg = "#f0f0f0"
+        bg = "#101010"
+        fg = "#f5f5f5"
         accent = "#1f6feb"
 
         self.root.configure(bg=bg)
@@ -108,56 +121,58 @@ class YoutubeMp3DownloaderApp:
         style = ttk.Style(self.root)
         style.theme_use("clam")
 
-        style.configure(
-            "TLabel",
-            background=bg,
-            foreground=fg,
-        )
-        style.configure(
-            "TButton",
-            background=accent,
-            foreground="#ffffff",
-            padding=6,
-        )
+        style.configure("TLabel", background=bg, foreground=fg)
+        style.configure("TButton", background=accent, foreground="#ffffff", padding=6)
         style.map("TButton", background=[("active", "#2386f5")])
-        style.configure(
-            "TCheckbutton",
-            background=bg,
-            foreground=fg,
-        )
+        style.configure("TCheckbutton", background=bg, foreground=fg)
         style.configure(
             "Horizontal.TProgressbar",
             background=accent,
-            troughcolor="#333333",
-            bordercolor="#333333",
+            troughcolor="#2b2b2b",
+            bordercolor="#2b2b2b",
             lightcolor=accent,
             darkcolor=accent,
         )
 
     def create_widgets(self):
         pad_x = 15
-        pad_y = 5
+        pad_y = 6
 
         # URL input / batch input
         url_frame = ttk.LabelFrame(self.root, text="YouTube links")
         url_frame.pack(fill="x", padx=pad_x, pady=pad_y)
 
-        self.single_url_entry = tk.Entry(url_frame, width=80, bg="#1e1e1e", fg="#f0f0f0", insertbackground="#f0f0f0")
+        self.single_url_entry = tk.Entry(
+            url_frame,
+            width=80,
+            bg="#181818",
+            fg="#f5f5f5",
+            insertbackground="#f5f5f5",
+            relief="flat",
+        )
         self.single_url_entry.pack(fill="x", padx=8, pady=4)
 
-        self.batch_text = tk.Text(url_frame, height=6, width=80, bg="#1e1e1e", fg="#f0f0f0", insertbackground="#f0f0f0")
+        self.batch_text = tk.Text(
+            url_frame,
+            height=6,
+            width=80,
+            bg="#181818",
+            fg="#f5f5f5",
+            insertbackground="#f5f5f5",
+            relief="flat",
+        )
         self.batch_text.pack(fill="both", padx=8, pady=4)
-        self.batch_text.pack_forget()  # start hidden
+        self.batch_text.pack_forget()  # hidden by default
 
         # Drag and drop hint
         if TK_DND_AVAILABLE:
-            hint = "Tip: Drag YouTube links or .txt file with URLs into the window."
+            hint = "Tip: Drag YouTube links or .txt file with URLs into this window."
         else:
-            hint = "Drag-and-drop not available (install tkinterdnd2 to enable)."
+            hint = "Drag-and-drop disabled (install tkinterdnd2 on Windows to enable)."
         self.dd_hint_label = ttk.Label(self.root, text=hint)
         self.dd_hint_label.pack(fill="x", padx=pad_x, pady=(0, pad_y))
 
-        # Batch mode toggle
+        # Options frame
         options_frame = ttk.Frame(self.root)
         options_frame.pack(fill="x", padx=pad_x, pady=pad_y)
 
@@ -167,9 +182,8 @@ class YoutubeMp3DownloaderApp:
             variable=self.batch_mode,
             command=self.toggle_batch_mode,
         )
-        batch_check.grid(row=0, column=0, sticky="w", padx=(0, 20))
+        batch_check.grid(row=0, column=0, sticky="w", padx=(0, 20), pady=(0, 4))
 
-        # Trim & normalize options
         trim_check = ttk.Checkbutton(
             options_frame,
             text="Trim for Batocera intro",
@@ -177,8 +191,8 @@ class YoutubeMp3DownloaderApp:
         )
         trim_check.grid(row=1, column=0, sticky="w", pady=(4, 0))
 
-        trim_seconds_label = ttk.Label(options_frame, text="Trim length (seconds):")
-        trim_seconds_label.grid(row=1, column=1, sticky="e", padx=(20, 4))
+        trim_label = ttk.Label(options_frame, text="Trim length (seconds):")
+        trim_label.grid(row=1, column=1, sticky="e", padx=(20, 4))
 
         trim_spin = tk.Spinbox(
             options_frame,
@@ -186,11 +200,12 @@ class YoutubeMp3DownloaderApp:
             to=120,
             textvariable=self.trim_seconds,
             width=5,
-            bg="#1e1e1e",
-            fg="#f0f0f0",
-            insertbackground="#f0f0f0",
+            bg="#181818",
+            fg="#f5f5f5",
+            insertbackground="#f5f5f5",
+            relief="flat",
         )
-        trim_spin.grid(row=1, column=2, sticky="w")
+        trim_spin.grid(row=1, column=2, sticky="w", pady=(4, 0))
 
         norm_check = ttk.Checkbutton(
             options_frame,
@@ -212,7 +227,7 @@ class YoutubeMp3DownloaderApp:
         folder_btn = ttk.Button(folder_row, text="Choose folder", command=self.choose_folder)
         folder_btn.pack(side="right")
 
-        # Progress + status
+        # Progress & status
         progress_frame = ttk.LabelFrame(self.root, text="Progress")
         progress_frame.pack(fill="x", padx=pad_x, pady=pad_y)
 
@@ -259,14 +274,12 @@ class YoutubeMp3DownloaderApp:
             self.folder_label.config(text=folder)
 
     def setup_drag_and_drop(self):
-        # Root must be an instance of TkinterDnD.Tk to support DND_FILES
+        # Root is a TkinterDnD.Tk instance here
         self.root.drop_target_register(DND_FILES)
         self.root.dnd_bind("<<Drop>>", self.handle_drop)
 
     def handle_drop(self, event):
         data = event.data.strip()
-
-        # Windows: {path1} {path2}; on other OS sometimes different formatting
         paths = self.root.splitlist(data)
 
         urls = []
@@ -276,7 +289,6 @@ class YoutubeMp3DownloaderApp:
             if not p:
                 continue
             if os.path.isfile(p) and p.lower().endswith(".txt"):
-                # Treat file as list of URLs
                 try:
                     with open(p, "r", encoding="utf-8") as f:
                         for line in f:
@@ -286,7 +298,6 @@ class YoutubeMp3DownloaderApp:
                 except Exception as e:
                     messagebox.showerror("Error reading file", str(e))
             else:
-                # Might be a URL string
                 urls.append(p)
 
         if urls:
@@ -334,7 +345,7 @@ class YoutubeMp3DownloaderApp:
 
         try:
             for url in urls:
-                self.update_status(f"Processing {url}")
+                self.update_status(f"Processing: {url}")
                 try:
                     download_and_process_audio(
                         url=url,
@@ -346,7 +357,6 @@ class YoutubeMp3DownloaderApp:
                     completed += 1
                 except Exception as e:
                     self.update_status(f"Error: {e}")
-                    # Continue with next URL
 
                 pct = int((completed / total) * 100)
                 self.update_progress(pct)
@@ -363,11 +373,7 @@ class YoutubeMp3DownloaderApp:
 
 
 def main():
-    # If tkinterdnd2 is available, use its Tk class for DND support
-    if TK_DND_AVAILABLE:
-        root = TkinterDnD()
-    else:
-        root = TkinterDnD()
+    root = TkinterDnD()
     app = YoutubeMp3DownloaderApp(root)
     root.mainloop()
 
