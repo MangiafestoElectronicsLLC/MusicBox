@@ -1,7 +1,3 @@
-pip install yt-dlp
-pip install pydub
-pip install tkinter
 yt-dlp
-pydub
 streamlit
-tkinterdnd2; sys_platform == 'win32'
+tkinterdnd2; platform_system == "Windows"
