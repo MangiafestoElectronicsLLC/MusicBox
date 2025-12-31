@@ -1,50 +1,42 @@
 # MusicBox
-# YouTube to MP3 Downloader (Batocera Intro Helper)
+# MusicBox – YouTube to MP3 (Batocera Intros)
 
-A small toolkit to download audio from YouTube as MP3 files, optimized for Batocera intro / menu music.
+MusicBox is a small tool to turn YouTube videos into MP3 files, optimized for Batocera intro / menu music.
 
-- Desktop app: Tkinter GUI with dark mode, batch mode, drag‑and‑drop (optional), trim + normalize
-- Web app: Streamlit interface with batch support and per-file download buttons
+- **Tkinter desktop app**: Dark mode, optional batch mode, drag‑and‑drop (Windows with `tkinterdnd2`), trim, normalize, progress bar.
+- **Streamlit web app**: Simple web UI, batch processing, download buttons.
 
-> Use only with your own content or copyright‑free videos. Downloading copyrighted material without permission may violate YouTube's Terms of Service.
+> Use only with your own content or copyright‑free videos. Downloading copyrighted material without permission may violate YouTube’s Terms of Service and local laws.
 
 ---
 
 ## Features
 
-- **Single or batch mode**  
-  - Paste one URL or multiple (one per line)  
-  - Batch mode is optional; you can keep using single‑URL mode
+- **Single or batch mode**
+  - Single URL mode by default.
+  - Optional batch mode: multiple URLs, one per line.
+- **Trim for Batocera intros**
+  - Default 35 seconds, configurable 5–120 seconds.
+- **Normalize volume**
+  - Uses FFmpeg's `loudnorm` filter for more consistent loudness.
+- **Dark mode desktop UI**
+  - Modern look with progress bar + status messages.
+- **Drag‑and‑drop (desktop app)**
+  - Drag `.txt` file with URLs or links (on supported setups).
+  - Requires `tkinterdnd2` on Windows.
 
-- **Auto-trim for Batocera intros**  
-  - Default: `35` seconds  
-  - Customizable from `5–120` seconds  
-  - Trims from the start of the audio
+---
 
-- **Auto-normalize volume**  
-  - Uses `pydub.effects.normalize`  
-  - Helps keep intro/menu audio consistent in loudness
+## Requirements
 
-- **Dark mode Tkinter UI**  
-  - Styled with `ttk`  
-  - Progress bar + status messages
-
-- **Drag-and-drop support (Tkinter app)**  
-  - Drag a `.txt` file with URLs into the window  
-  - Or drag URLs (platform-dependent)  
-  - Requires `tkinterdnd2` (on Windows)
-
-- **Streamlit version**  
-  - Simple web UI  
-  - Multi-URL support  
-  - Produces per-file download buttons
+- Python 3.10+ (tested for Python 3.13 compatibility – no `pydub` / `audioop`).
+- FFmpeg installed and in your system `PATH`.
+- Internet connection for downloading from YouTube.
 
 ---
 
 ## Installation
 
-### 1. Clone the repo
-
 ```bash
-git clone https://github.com/your-username/yt-mp3-downloader.git
-cd yt-mp3-downloader
+git clone https://github.com/your-username/MusicBox.git
+cd MusicBox
