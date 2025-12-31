@@ -1,0 +1,3 @@
+pip install yt-dlp
+pip install pydub
+pip install tkinter
